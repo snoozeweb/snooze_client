@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 url = "https://github.com/Nemega/snooze"
 setup(
     name="snooze-client",
-    version='1.0.2',
+    version='1.0.3',
     author='Guillaume Ludinard, Florian Dematraz',
     author_email='guillaume.ludi@gmail.com, ',
     description="Client library for snooze server",
