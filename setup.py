@@ -15,7 +15,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'snooze_client = snooze_client.cli:snooze'
+            'snooze_client = snooze_client.cli:snooze',
+            'snooze_wrap = snooze_client.cli:snooze_wrap',
         ],
     },
     install_requires = [

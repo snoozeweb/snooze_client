@@ -1,6 +1,10 @@
 '''CLI for snooze client'''
 
 import click
+import subprocess
+import socket
+
+from subprocess import CalledProcessError, TimeoutExpired
 
 from snooze_client import Snooze
 
@@ -31,3 +35,39 @@ def alert(server, keyvalues):
         key, value = keyvalue.split('=', 2)
         record[key] = value
     client.alert(record)
+def wrap_error(server, err):
+    snooze = Snooze(server)
+    record = {}
+    record['source'] = 'wrap'
+    record['wrap_cmd'] = ' '.join(err.cmd)
+    record['process'] = err.cmd[0]
+    host = socket.gethostname()
+    if '.' in host:
+        record['fqdn'] = host
+        record['host'] = host.split('.', 1)[0]
+    else:
+        record['host'] = host
+    record['wrap_exitcode'] = err.returncode
+    record['wrap_stdout'] = err.stdout
+    record['wrap_stderr'] = err.stderr
+    if hasattr(err, 'timeout'):
+        record['wrap_timeout'] = err.timeout
+    record['message'] = err.message
+    snooze.alert(record)
+
+@click.command()
+@add_options(COMMON_OPTIONS)
+@click.option('--timeout', '-t', help='Timeout for the command that is run')
+@click.argument('cmd', nargs=-1)
+def snooze_wrap(server, timeout, cmd):
+    '''
+    Wrap a command to send a snooze notification if it fails (non-zero exit code).
+    Useful for cronjobs.
+    '''
+    options = {
+        'timeout': timeout,
+    }
+    try:
+        result = subprocess.run(cmd, **options)
+    except (CalledProcessError, TimeoutExpired) as err:
+        wrap_error(server, err)
