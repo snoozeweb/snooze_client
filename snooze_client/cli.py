@@ -23,17 +23,23 @@ def add_options(options):
 def snooze():
     pass
 
-@snooze.command()
-@add_options(COMMON_OPTIONS)
-@click.argument('keyvalues', nargs=-1)
-def alert(server, keyvalues):
-    client = Snooze(server)
+def parse_arguments(keyvalues):
+    '''Parse arguments to make a record'''
     record = {}
     for keyvalue in keyvalues:
         if '=' not in keyvalue:
             raise ValueError("Options must be of format key=value")
-        key, value = keyvalue.split('=', 2)
+        key, value = keyvalue.split('=', 1)
         record[key] = value
+    return record
+
+@snooze.command()
+@add_options(COMMON_OPTIONS)
+@click.argument('keyvalues', nargs=-1)
+def alert(server, keyvalues):
+    '''Raise an alert in snooze'''
+    client = Snooze(server)
+    record = parse_arguments(keyvalues)
     client.alert(record)
 def wrap_error(server, err):
     snooze = Snooze(server)
