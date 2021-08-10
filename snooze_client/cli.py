@@ -4,7 +4,7 @@ import click
 import subprocess
 import socket
 
-from subprocess import CalledProcessError, TimeoutExpired
+from subprocess import CalledProcessError, TimeoutExpired, Popen, PIPE
 
 from snooze_client import Snooze
 
@@ -41,31 +41,40 @@ def alert(server, keyvalues):
     client = Snooze(server)
     record = parse_arguments(keyvalues)
     client.alert(record)
-def wrap_error(server, err):
+
+def wrap_error(server, cmd, stdout, stderr, message, severity='err', timeout=None, exit_code=None):
+    print("Error: The command {} failed".format(cmd))
     snooze = Snooze(server)
     record = {}
     record['source'] = 'wrap'
-    record['wrap_cmd'] = ' '.join(err.cmd)
-    record['process'] = err.cmd[0]
+    record['wrap_cmd'] = ' '.join(cmd)
+    record['process'] = cmd[0]
     host = socket.gethostname()
     if '.' in host:
         record['fqdn'] = host
         record['host'] = host.split('.', 1)[0]
     else:
         record['host'] = host
-    record['wrap_exitcode'] = err.returncode
-    record['wrap_stdout'] = err.stdout
-    record['wrap_stderr'] = err.stderr
-    if hasattr(err, 'timeout'):
-        record['wrap_timeout'] = err.timeout
-    record['message'] = err.message
+    if exit_code:
+        record['wrap_exitcode'] = exit_code
+    record['wrap_stdout'] = stdout.decode()
+    record['wrap_stderr'] = stderr.decode()
+    if timeout:
+        record['wrap_timeout'] = timeout
+    record['severity'] = severity
+    record['message'] = message
+    print("Sending alert: {}".format(record))
     snooze.alert(record)
 
 @click.command()
 @add_options(COMMON_OPTIONS)
-@click.option('--timeout', '-t', help='Timeout for the command that is run')
+@click.option('--timeout', '-t', type=int, help='Timeout for the command that is run')
+@click.option('--ok', '-o', type=int, multiple=True, default=[0], help='Exit code that are considered valid (that should not send an alert).')
+@click.option('--warning', '-w', type=int, multiple=True, default=[], help='Exit code that should return a warning alert')
+@click.option('--critical', '-c', type=int, multiple=True, default=[], help='Exit code that should return a critical alert')
+@click.option('--fatal', '-f', type=int, multiple=True, default=[], help='Exit code that should return a fatal alert')
 @click.argument('cmd', nargs=-1)
-def snooze_wrap(server, timeout, cmd):
+def snooze_wrap(server, timeout, ok, critical, warning, fatal, cmd):
     '''
     Wrap a command to send a snooze notification if it fails (non-zero exit code).
     Useful for cronjobs.
@@ -74,6 +83,25 @@ def snooze_wrap(server, timeout, cmd):
         'timeout': timeout,
     }
     try:
-        result = subprocess.run(cmd, **options)
-    except (CalledProcessError, TimeoutExpired) as err:
-        wrap_error(server, err)
+        cmd = list(cmd)
+        process = Popen(cmd, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = process.communicate(**options)
+        exit_code = process.returncode
+        if exit_code in ok:
+            print("Command {} executed successfully (exit {})".format(cmd, exit_code))
+        else:
+            if exit_code in warning:
+                severity = 'warning'
+            elif exit_code in critical:
+                severity = 'critical'
+            elif exit_code in fatal:
+                severity = 'fatal'
+            else:
+                severity = 'err'
+            message = "Command {} failed with exit {} ({})".format(cmd, exit_code, severity)
+            wrap_error(server, cmd, stdout, stderr, message, severity, exit_code=exit_code) 
+    except TimeoutExpired as err:
+        process.kill()
+        stdout, stderr = process.communicate()
+        message = "Command {} timed out after {}s".format(cmd, timeout)
+        wrap_error(server, cmd, stdout, stderr, message, timeout=timeout)
