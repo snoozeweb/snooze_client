@@ -4,7 +4,13 @@ import requests
 import os
 import yaml
 
+from functools import wraps
 from  pathlib import Path
+
+from datetime import datetime
+
+from requests.auth import HTTPBasicAuth
+from snooze_client.time_constraints import Constraint
 
 CA_BUNDLE_PATHS = [
     '/etc/ssl/certs/ca-certificates.crt', # Debian / Ubuntu / Gentoo
@@ -26,19 +32,29 @@ def ca_bundle():
             if Path(ca_path).exists():
                 return ca_path
 
-def fetch_token():
-    pass
+def authenticated(method):
+    '''Decorator for methods that require authentication'''
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        '''Wrapper'''
+        if not self.token:
+            self.login()
+        return method(self, *args, **kwargs)
+    return wrapper
 
 class Snooze(object):
     '''An object for connecting to the snooze server'''
-    def __init__(self, server=None, auth=None, **kwargs):
+    def __init__(self, server=None, app_name='snooze_client', auth_method=None, credentials={}, **kwargs):
         '''Create a new connection to snooze server'''
         self.load_config()
         self.server = server or self.config.get('server')
+        self.app_name = app_name
+        self.token = None
+        self.auth_method = auth_method or self.config.get('auth_method')
+        self.credentials = credentials or self.config.get('credentials')
+        self.ca = self.config.get('ca_bundle') or ca_bundle()
         if not isinstance(self.server, str):
             raise TypeError("Parameter `server` must be a string representing a URL.")
-        if auth:
-            pass
 
     def load_config(self):
         '''Fetch configuration from config file if no option is given'''
@@ -59,11 +75,64 @@ class Snooze(object):
             return None
 
     def login(self):
-        pass
+        '''
+        Authenticate with the `auth_method` and `credentials` arguments.
+        '''
+        if self.auth_method == 'local' or self.auth_method == 'ldap':
+            username = self.credentials.get('username')
+            password = self.credentials.get('password')
+            auth = HTTPBasicAuth(username, password)
+        else:
+            raise Exception("Authentication method '{}' not supported".format(self.auth_method))
+        response = requests.post(
+            '{}/api/login/{}'.format(self.server, self.auth_method),
+            verify=self.ca,
+            auth=auth,
+            headers={'Content-type': 'application/json'},
+        )
+        if response.json().get('token'):
+            self.token = response.json().get('token')
+        else:
+            raise Exception("Could not get token")
 
     def alert(self, record):
         '''Send a new alert to snooze'''
-        requests.post("{}/api/alert".format(self.server), verify=ca_bundle(), json=record)
+        requests.post("{}/api/alert".format(self.server), verify=self.ca, json=record)
 
-    def snooze(self):
-        pass
+    @authenticated
+    def record(self, search=[]):
+        headers = {}
+        headers['Authorization'] = 'JWT ' + self.token
+        headers['Content-type'] = 'application/json'
+        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers)
+        return resp.json().get('data')
+
+    @authenticated
+    def comment(self, comment_type, user, uid, message):
+        headers = {}
+        headers['Authorization'] = 'JWT ' + self.token
+        headers['Content-type'] = 'application/json'
+        payload = {
+            'record_uid': uid,
+            'type': comment_type,
+            'message': message,
+            'user': user,
+            'date': datetime.now().isoformat(),
+        }
+        resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, data=payload)
+
+    @authenticated
+    def snooze(self, name, condition=list, time_constraint={}, comment=None):
+        '''Create a snooze'''
+        mysnooze = {}
+        if not comment:
+            comment = "Created by snooze API"
+        if isinstance(time_constraint, Constraint):
+            time_constraint = time_constraint.to_time_constraint()
+        mysnooze = {
+            'name': "[{}] {}".format(self.app_name, name),
+            'condition': condition,
+            'time_constraints': time_constraint,
+            'comment': comment,
+        }
+        requests.post("{}/api/snooze".format(self.server), verify=self.ca, json=mysnooze)
