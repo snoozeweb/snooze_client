@@ -12,6 +12,10 @@ COMMON_OPTIONS = [
     click.option('--server', '-s', help='URI of the Snooze server'),
 ]
 
+AUTH_OPTIONS = [
+    click.option('--auth-method', '-A', type=click.Choice(['local', 'ldap', 'jwt']), help='Authentication method to use.')
+]
+
 def add_options(options):
     def callback(func):
         for option in reversed(options):
@@ -41,6 +45,16 @@ def alert(server, keyvalues):
     client = Snooze(server)
     record = parse_arguments(keyvalues)
     client.alert(record)
+
+@snooze.command()
+@snooze.option('--auth-method', '-A', type=click.Choice(['local', 'ldap', 'jwt']), help='Authentication method to use.')
+def login(server):
+    pass
+
+@snooze.command()
+@add_options(COMMON_OPTIONS)
+def snooze(server, args):
+    pass
 
 def wrap_error(server, cmd, stdout, stderr, message, severity='err', timeout=None, exit_code=None):
     print("Error: The command {} failed".format(cmd))
