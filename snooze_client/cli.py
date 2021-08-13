@@ -73,14 +73,16 @@ def wrap_error(server, cmd, stdout, stderr, message, severity='err', timeout=Non
 @click.option('--warning', '-w', type=int, multiple=True, default=[], help='Exit code that should return a warning alert')
 @click.option('--critical', '-c', type=int, multiple=True, default=[], help='Exit code that should return a critical alert')
 @click.option('--fatal', '-f', type=int, multiple=True, default=[], help='Exit code that should return a fatal alert')
+@click.option('--sh', '-S', default=None, help='Execute the command in a shell if present')
 @click.argument('cmd', nargs=-1)
-def snooze_wrap(server, timeout, ok, critical, warning, fatal, cmd):
+def snooze_wrap(server, timeout, ok, critical, warning, fatal, cmd, sh):
     '''
     Wrap a command to send a snooze notification if it fails (non-zero exit code).
     Useful for cronjobs.
     '''
     options = {
         'timeout': timeout,
+        'shell': sh,
     }
     try:
         cmd = list(cmd)
