@@ -4,6 +4,7 @@ import jwt
 import requests
 import os
 import yaml
+import json
 
 from functools import wraps
 from  pathlib import Path
@@ -41,7 +42,7 @@ def authenticated(method):
         if not self.token:
             self.login()
         try:
-            jwt.decode(self.token)
+            jwt.decode(self.token, options={'verify_signature': False})
         except jwt.ExpiredSignatureError:
             self.login()
         return method(self, *args, **kwargs)
@@ -109,7 +110,12 @@ class Snooze(object):
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'
-        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers, data={'s': search})
+        mysearch = {
+            's': json.dumps(search),
+        }
+        print(mysearch)
+        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers, params=mysearch)
+        resp.raise_for_status()
         return resp.json().get('data')
 
     @authenticated
@@ -117,18 +123,24 @@ class Snooze(object):
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'
-        payload = {
+        mycomment = {
             'record_uid': uid,
             'type': comment_type,
             'message': message,
             'user': user,
             'date': datetime.now().isoformat(),
         }
-        resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, data=payload)
+        print(mycomment)
+        resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, json=[mycomment])
+        print(resp.content)
+        resp.raise_for_status()
 
     @authenticated
     def snooze(self, name, condition=list, time_constraint={}, comment=None):
         '''Create a snooze'''
+        headers = {}
+        headers['Authorization'] = 'JWT ' + self.token
+        headers['Content-type'] = 'application/json'
         mysnooze = {}
         if not comment:
             comment = "Created by snooze API"
@@ -140,4 +152,7 @@ class Snooze(object):
             'time_constraints': time_constraint,
             'comment': comment,
         }
-        requests.post("{}/api/snooze".format(self.server), verify=self.ca, json=mysnooze)
+        print(mysnooze)
+        resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=[mysnooze])
+        print(resp.content)
+        resp.raise_for_status()
