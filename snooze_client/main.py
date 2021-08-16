@@ -23,6 +23,8 @@ CA_BUNDLE_PATHS = [
     '/etc/ssl/cert.pem', # Alpine Linux
 ]
 
+TOKEN_FILE = os.environ['HOME'] + '/.snooze-token'
+
 def ca_bundle():
     '''Returns Linux CA bundle path'''
     if os.environ.get('SSL_CERT_FILE'):
@@ -48,19 +50,69 @@ def authenticated(method):
         return method(self, *args, **kwargs)
     return wrapper
 
+def get_token():
+    '''Attempt to get token from disk'''
+    try:
+        with open(TOKEN_FILE, 'r') as f:
+            token = f.read()
+        return token
+    except:
+        return None
+
+def set_token(token):
+    '''Write token to disk'''
+    myfile = os.open(TOKEN_FILE, os.O_CREAT | os.O_WRONLY, 0o600)
+    with open(myfile, 'w+') as f:
+        f.write(token)
+
 class Snooze(object):
     '''An object for connecting to the snooze server'''
-    def __init__(self, server=None, app_name='snooze_client', auth_method=None, credentials={}, **kwargs):
-        '''Create a new connection to snooze server'''
+    def __init__(
+            self,
+            server=None,
+            app_name='snooze_client',
+            auth_method=None,
+            credentials={},
+            token_to_disk=True,
+            ca=None,
+            **kwargs
+        ):
+        '''
+        Create a new connection to snooze server.
+        Note: All parameters can be precised in the configuration file at /etc/snooze/client.yaml.
+        The configuration file can be overridden with the `SNOOZE_CLIENT_CONFIG_FILE` environment variable.
+
+        Parameters:
+        -----------
+        server: str
+            URI of the snooze server. Example: https://snooze.example.com:5200
+        app_name: str
+            Name of the client. Used in some endpoint to prepend the name of the entry with client information.
+        auth_method: str
+            Name of the authentication method. Supported values: local, ldap.
+        credentials: dict
+            A dictionary of values required by the auth_method.
+            Required values for local and ldap: `username`, `password`.
+        token_to_disk: bool
+            If enabled, will flush the token retreived after authentication to disk.
+        ca_bundle: str
+            Path to the CA bundle to use for the TLS connection. Will default to the system
+            CA bundle if not precised (will not use requests custom CA bundle).
+        Returns
+        -------
+        Snooze
+            A snooze server object. Call its method to execute API calls to snooze server.
+        '''
         self.load_config()
         self.server = server or self.config.get('server')
-        self.app_name = app_name
-        self.token = None
+        self.app_name = app_name or self.config.get('app_name') or 'snooze_client'
         self.auth_method = auth_method or self.config.get('auth_method')
         self.credentials = credentials or self.config.get('credentials')
-        self.ca = self.config.get('ca_bundle') or ca_bundle()
+        self.ca = ca or self.config.get('ca_bundle') or ca_bundle()
+        self.token_to_disk = token_to_disk or self.config.get()
         if not isinstance(self.server, str):
             raise TypeError("Parameter `server` must be a string representing a URL.")
+        self.token = get_token()
 
     def load_config(self):
         '''Fetch configuration from config file if no option is given'''
@@ -71,42 +123,58 @@ class Snooze(object):
         else:
             self.config = {}
 
-    def get_token_from_file(self):
-        token_file = os.environ['HOME'] + '.snooze-token'
-        if os.path.exists(token_file):
-            with open(token_file, 'r') as myfile:
-                token = myfile.read()
-                return token
-        else:
-            return None
-
     def login(self):
         '''
         Authenticate with the `auth_method` and `credentials` arguments.
+        Will set the token attribute of the class if successful.
+
+        Raises:
+            AttributeError: Will be raised when the `auth_method` attribute
+                is not supported.
+            HTTPError: Will be raised if the server answer with something different
+                from OK 200.
+            Exception: Will be raised if there is no `token` key in the result dictionary.
         '''
         if self.auth_method == 'local' or self.auth_method == 'ldap':
             username = self.credentials.get('username')
             password = self.credentials.get('password')
             auth = HTTPBasicAuth(username, password)
         else:
-            raise Exception("Authentication method '{}' not supported".format(self.auth_method))
+            raise AttributeError("Authentication method '%s' not supported" % self.auth_method)
         response = requests.post(
             '{}/api/login/{}'.format(self.server, self.auth_method),
             verify=self.ca,
             auth=auth,
             headers={'Content-type': 'application/json'},
         )
+        response.raise_for_status()
         if response.json().get('token'):
             self.token = response.json().get('token')
+            if self.token_to_disk:
+                set_token(self.token)
         else:
             raise Exception("Could not get token")
 
     def alert(self, record):
-        '''Send a new alert to snooze'''
-        requests.post("{}/api/alert".format(self.server), verify=self.ca, json=record)
+        '''
+        Send a new alert to snooze.
+
+        Args:
+            record (dict): The alert to send to snooze, in dictionary format.
+        '''
+        resp = requests.post("{}/api/alert".format(self.server), verify=self.ca, json=record)
+        resp.raise_for_status()
 
     @authenticated
-    def record(self, search=[]):
+    def record(self, search=list):
+        '''
+        Return a list of records matching the search.
+
+        Args:
+            search (list): A list representing the search. Example: ["=", "host", "myhost01"]
+        Returns:
+            list: List of dictionaries representing the records matching the search
+        '''
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'
@@ -119,7 +187,19 @@ class Snooze(object):
         return resp.json().get('data')
 
     @authenticated
-    def comment(self, comment_type, user, uid, message):
+    def comment(self, comment_type, user_name, user_method, uid, message):
+        '''
+        Write a comment on a record.
+
+        Args:
+            comment_type(str): The type of the comment.
+                Supported values: `ack`, `close`, `open`, `esc`, `` (for comment).
+            user_name (str): The name of the user to comment with.
+            user_method (str): The method associated with the user.
+                Supported values: `local`, `ldap` (same as `auth_method`).
+            uid (str): UID of the record.
+            message (str): Content of the comment.
+        '''
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'
@@ -127,7 +207,8 @@ class Snooze(object):
             'record_uid': uid,
             'type': comment_type,
             'message': message,
-            'user': user,
+            'name': user_name,
+            'method': user_method,
             'date': datetime.now().isoformat(),
         }
         print(mycomment)
@@ -137,7 +218,18 @@ class Snooze(object):
 
     @authenticated
     def snooze(self, name, condition=list, time_constraint={}, comment=None):
-        '''Create a snooze'''
+        '''
+        Create a snooze entry.
+
+        Args:
+            name (str): Name of the snooze entry.
+            condition (list): Condition for which this snooze entry will match.
+                Example: ["=", "host", "myhost01"]
+            time_constraint (Constraint or dict): The time constraint of the snooze entry. Can be
+                expressed using objects from the `snooze_client.time_constraints` module, or a
+                dictionary.
+            comment (str): A comment associated with the snooze entry.
+        '''
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'

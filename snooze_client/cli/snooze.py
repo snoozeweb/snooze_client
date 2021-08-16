@@ -10,7 +10,7 @@ def parse_constraints(weekdays, datetimes, times):
     '''Parse a timeconstraint argument (repeatable)'''
     constraints = []
     if weekdays:
-        constraints.append(Weekday(weekdays))
+        constraints.append(Weekday(*weekdays))
     for datetime in datetimes:
         constraints.append(Datetime(*datetime))
     for time in times:
@@ -23,7 +23,7 @@ def parse_condition(arg):
 
 @click.command()
 @click.argument('name')
-@click.option('-c', '--condition', type=str, help='JSON representing the condition')
+@click.option('-c', '--condition', default='[]', type=str, help='JSON representing the condition')
 @click.option('-w', '--weekdays', type=str, multiple=True, help='Weekday constraint')
 @click.option('-d', '--datetimes', type=(str,str), multiple=True, help='Datetime constraint')
 @click.option('-t', '--times', type=(str,str), multiple=True, help='Time constraint')

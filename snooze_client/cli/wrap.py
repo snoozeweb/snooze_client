@@ -4,6 +4,8 @@ import click
 
 from subprocess import CalledProcessError, TimeoutExpired, Popen, PIPE
 
+from snooze_client.cli.utils import pass_server
+
 def wrap_error(server, cmd, stdout, stderr, message, severity='err', timeout=None, exit_code=None):
     print("Error: The command {} failed".format(cmd))
     snooze = Snooze(server)
@@ -29,7 +31,6 @@ def wrap_error(server, cmd, stdout, stderr, message, severity='err', timeout=Non
     snooze.alert(record)
 
 @click.command()
-@add_options(COMMON_OPTIONS)
 @click.option('--timeout', '-t', type=int, help='Timeout for the command that is run')
 @click.option('--ok', '-o', type=int, multiple=True, default=[0], help='Exit code that are considered valid (that should not send an alert).')
 @click.option('--warning', '-w', type=int, multiple=True, default=[], help='Exit code that should return a warning alert')
@@ -37,7 +38,8 @@ def wrap_error(server, cmd, stdout, stderr, message, severity='err', timeout=Non
 @click.option('--fatal', '-f', type=int, multiple=True, default=[], help='Exit code that should return a fatal alert')
 @click.option('--sh', '-S', default=None, help='Execute the command in a shell if present')
 @click.argument('cmd', nargs=-1)
-def snooze_wrap(server, timeout, ok, critical, warning, fatal, cmd, sh):
+@pass_server
+def wrap(server, timeout, ok, critical, warning, fatal, cmd, sh):
     '''
     Wrap a command to send a snooze notification if it fails (non-zero exit code).
     Useful for cronjobs.
