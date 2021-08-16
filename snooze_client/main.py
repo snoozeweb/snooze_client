@@ -1,5 +1,6 @@
 '''Allow alerts to be sent to snooze server'''
 import click
+import jwt
 import requests
 import os
 import yaml
@@ -38,6 +39,10 @@ def authenticated(method):
     def wrapper(self, *args, **kwargs):
         '''Wrapper'''
         if not self.token:
+            self.login()
+        try:
+            jwt.decode(self.token)
+        except jwt.ExpiredSignatureError:
             self.login()
         return method(self, *args, **kwargs)
     return wrapper
@@ -104,7 +109,7 @@ class Snooze(object):
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'
-        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers)
+        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers, data={'s': search})
         return resp.json().get('data')
 
     @authenticated
