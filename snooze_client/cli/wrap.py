@@ -1,60 +1,8 @@
-'''CLI for snooze client'''
+'''A module for the snooze_wrap command'''
 
 import click
-import subprocess
-import socket
 
 from subprocess import CalledProcessError, TimeoutExpired, Popen, PIPE
-
-from snooze_client import Snooze
-
-COMMON_OPTIONS = [
-    click.option('--server', '-s', help='URI of the Snooze server'),
-]
-
-AUTH_OPTIONS = [
-    click.option('--auth-method', '-A', type=click.Choice(['local', 'ldap', 'jwt']), help='Authentication method to use.')
-]
-
-def add_options(options):
-    def callback(func):
-        for option in reversed(options):
-            func = option(func)
-        return func
-    return callback
-
-@click.group()
-def snooze():
-    pass
-
-def parse_arguments(keyvalues):
-    '''Parse arguments to make a record'''
-    record = {}
-    for keyvalue in keyvalues:
-        if '=' not in keyvalue:
-            raise ValueError("Options must be of format key=value")
-        key, value = keyvalue.split('=', 1)
-        record[key] = value
-    return record
-
-@snooze.command()
-@add_options(COMMON_OPTIONS)
-@click.argument('keyvalues', nargs=-1)
-def alert(server, keyvalues):
-    '''Raise an alert in snooze'''
-    client = Snooze(server)
-    record = parse_arguments(keyvalues)
-    client.alert(record)
-
-@snooze.command()
-@snooze.option('--auth-method', '-A', type=click.Choice(['local', 'ldap', 'jwt']), help='Authentication method to use.')
-def login(server):
-    pass
-
-@snooze.command()
-@add_options(COMMON_OPTIONS)
-def snooze(server, args):
-    pass
 
 def wrap_error(server, cmd, stdout, stderr, message, severity='err', timeout=None, exit_code=None):
     print("Error: The command {} failed".format(cmd))
