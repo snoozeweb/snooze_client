@@ -166,23 +166,34 @@ class Snooze(object):
         resp.raise_for_status()
 
     @authenticated
-    def record(self, search=list):
+    def record(self, search=None, ql=None):
         '''
         Return a list of records matching the search.
+        If `search` or `ql` is not precised, the default search will be `[]` (everything).
 
         Args:
             search (list): A list representing the search. Example: ["=", "host", "myhost01"]
+            ql (str): A snooze query language string. It will be translated by the server into a
+                search (list). Useful for human interfaces.
         Returns:
             list: List of dictionaries representing the records matching the search
         '''
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'
-        mysearch = {
-            's': json.dumps(search),
-        }
-        print(mysearch)
-        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers, params=mysearch)
+        if search:
+            params = {
+                's': json.dumps(search),
+            }
+        elif ql:
+            params = {
+                'ql': ql,
+            }
+        else:
+            params = {
+                's': [],
+            }
+        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers, params=params)
         resp.raise_for_status()
         return resp.json().get('data')
 
@@ -217,7 +228,7 @@ class Snooze(object):
         resp.raise_for_status()
 
     @authenticated
-    def snooze(self, name, condition=list, time_constraint={}, comment=None):
+    def snooze(self, name, condition=None, ql=None, time_constraint={}, comment=None):
         '''
         Create a snooze entry.
 
@@ -238,13 +249,18 @@ class Snooze(object):
             comment = "Created by snooze API"
         if isinstance(time_constraint, Constraint):
             time_constraint = time_constraint.to_time_constraint()
-        mysnooze = {
+        params = {
             'name': "[{}] {}".format(self.app_name, name),
-            'condition': condition,
             'time_constraints': time_constraint,
             'comment': comment,
         }
+        if condition:
+            params['condition'] = condition
+        elif ql:
+            params['qls'] = [{'ql': ql, 'field': 'condition'}]
+        else:
+            params['condition'] = []
         print(mysnooze)
-        resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=[mysnooze])
+        resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=[params])
         print(resp.content)
         resp.raise_for_status()
