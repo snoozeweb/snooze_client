@@ -23,15 +23,16 @@ def parse_condition(arg):
 
 @click.command()
 @click.argument('name')
-@click.option('-c', '--condition', default='[]', type=str, help='JSON representing the condition')
+@click.option('-q', '--ql', default=None, type=str, help='Snooze query language representing the condition (Optional)')
+@click.option('-c', '--condition', default=None, type=str, help='JSON representing the condition (Optional)')
 @click.option('-w', '--weekdays', type=str, multiple=True, help='Weekday constraint')
 @click.option('-d', '--datetimes', type=(str,str), multiple=True, help='Datetime constraint')
 @click.option('-t', '--times', type=(str,str), multiple=True, help='Time constraint')
 @pass_server
-def snooze(server, name, condition, weekdays, datetimes, times):
+def snooze(server, name, ql, condition, weekdays, datetimes, times):
     '''
     Create a snooze entry
     '''
     constraints = parse_constraints(weekdays, datetimes, times)
     condition = parse_condition(condition)
-    server.snooze(name, condition, constraints)
+    server.snooze(name, condition, ql, constraints)
