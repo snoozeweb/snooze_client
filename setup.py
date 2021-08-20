@@ -23,7 +23,9 @@ setup(
     install_requires=[
         'PyYAML',
         'click',
+        'click-option-group',
         'pathlib',
+        'pyjwt',
         'requests',
     ],
 )
