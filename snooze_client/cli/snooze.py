@@ -34,5 +34,6 @@ def snooze(server, name, ql, condition, weekdays, datetimes, times):
     Create a snooze entry
     '''
     constraints = parse_constraints(weekdays, datetimes, times)
-    condition = parse_condition(condition)
+    if condition:
+        condition = parse_condition(condition)
     server.snooze(name, condition, ql, constraints)
