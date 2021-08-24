@@ -24,7 +24,14 @@ CA_BUNDLE_PATHS = [
     '/etc/ssl/cert.pem', # Alpine Linux
 ]
 
-TOKEN_FILE = os.environ.get('SNOOZE_TOKEN_PATH') or os.environ['PWD']+'/.snooze-token'
+if 'SNOOZE_TOKEN_PATH' in os.environ:
+    TOKEN_FILE = os.environ['SNOOZE_TOKEN_PATH']
+elif 'PWD' in os.environ:
+    TOKEN_FILE = os.environ['PWD'] + '/.snooze-token'
+elif 'HOME' in os.environ:
+    TOKEN_FILE = os.environ['HOME'] + '/.snooze-token'
+else:
+    TOKEN_FILE = None
 
 def ca_bundle():
     '''Returns Linux CA bundle path'''
@@ -54,17 +61,21 @@ def authenticated(method):
 def get_token():
     '''Attempt to get token from disk'''
     try:
-        with open(TOKEN_FILE, 'r') as f:
-            token = f.read()
-        return token
+        if TOKEN_FILE:
+            with open(TOKEN_FILE, 'r') as f:
+                token = f.read()
+            return token
+        else:
+            return None
     except:
         return None
 
 def set_token(token):
     '''Write token to disk'''
-    myfile = os.open(TOKEN_FILE, os.O_CREAT | os.O_WRONLY, 0o600)
-    with open(myfile, 'w+') as f:
-        f.write(token)
+    if TOKEN_FILE:
+        myfile = os.open(TOKEN_FILE, os.O_CREAT | os.O_WRONLY, 0o600)
+        with open(myfile, 'w+') as f:
+            f.write(token)
 
 class Snooze(object):
     '''An object for connecting to the snooze server'''
