@@ -5,6 +5,7 @@ import requests
 import os
 import yaml
 import json
+import socket
 
 from functools import wraps
 from  pathlib import Path
@@ -23,7 +24,7 @@ CA_BUNDLE_PATHS = [
     '/etc/ssl/cert.pem', # Alpine Linux
 ]
 
-TOKEN_FILE = os.environ['HOME'] + '/.snooze-token'
+TOKEN_FILE = os.environ.get('SNOOZE_TOKEN_PATH') or os.environ['PWD']+'/.snooze-token'
 
 def ca_bundle():
     '''Returns Linux CA bundle path'''
@@ -113,6 +114,10 @@ class Snooze(object):
         if not isinstance(self.server, str):
             raise TypeError("Parameter `server` must be a string representing a URL.")
         self.token = get_token()
+        try:
+            self.auth_payload = jwt.decode(self.token, options={'verify_signature': False})
+        except Exception:
+            self.auth_payload = None
 
     def load_config(self):
         '''Fetch configuration from config file if no option is given'''
@@ -154,6 +159,25 @@ class Snooze(object):
                 set_token(self.token)
         else:
             raise Exception("Could not get token")
+
+    def alert_with_defaults(self, record):
+        '''Send an alert to snooze, but provide useful defaults based on OS context'''
+        if 'host' not in record:
+            host = socket.gethostname()
+            if '.' in host:
+                record['host'] = host.split('.')[0]
+                record['fqdn'] = host
+            else:
+                record['host'] = host
+        if 'timestamp' not in record:
+            record['timestamp'] = datetime.now().astimezone().isoformat()
+        if 'source' not in record:
+            record['source'] = 'snooze_client'
+        if 'process' not in record:
+            record['process'] = self.app_name
+
+        # Send the record normally
+        self.alert(record)
 
     def alert(self, record):
         '''
@@ -226,6 +250,7 @@ class Snooze(object):
         resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, json=[mycomment])
         print(resp.content)
         resp.raise_for_status()
+        return resp.json().get('data')
 
     @authenticated
     def snooze(self, name, condition=None, ql=None, time_constraint={}, comment=None):
@@ -264,3 +289,4 @@ class Snooze(object):
         resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=[params])
         print(resp.content)
         resp.raise_for_status()
+        return resp.json().get('data')
