@@ -233,7 +233,7 @@ class Snooze(object):
         return resp.json().get('data')
 
     @authenticated
-    def comment(self, comment_type, user_name, user_method, uid, message):
+    def comment(self, comment_type, user_name, user_method, uid, message, modifications=None):
         '''
         Write a comment on a record.
 
@@ -245,6 +245,7 @@ class Snooze(object):
                 Supported values: `local`, `ldap` (same as `auth_method`).
             uid (str): UID of the record.
             message (str): Content of the comment.
+            modifications (list): An array of modification to send to the record. Used for re-escalations.
         '''
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
@@ -257,9 +258,9 @@ class Snooze(object):
             'method': user_method,
             'date': datetime.now().isoformat(),
         }
-        print(mycomment)
+        if modifications:
+            mycomment['modifications'] = modifications
         resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, json=[mycomment])
-        print(resp.content)
         resp.raise_for_status()
         return resp.json().get('data')
 
