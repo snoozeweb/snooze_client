@@ -6,12 +6,15 @@ import os
 import yaml
 import json
 import socket
+import logging
+import sys
 
 from functools import wraps
 from  pathlib import Path
 
 from datetime import datetime
 
+from filelock import FileLock
 from requests.auth import HTTPBasicAuth
 from snooze_client.time_constraints import Constraint
 
@@ -23,6 +26,10 @@ CA_BUNDLE_PATHS = [
     '/etc/pki/tls/cacert.pem', # OpenELEC
     '/etc/ssl/cert.pem', # Alpine Linux
 ]
+
+log = logging.getLogger('snooze_client')
+log.setLevel(logging.INFO)
+log.addHandler(logging.StreamHandler(sys.stderr))
 
 if 'SNOOZE_TOKEN_PATH' in os.environ:
     TOKEN_FILE = os.environ['SNOOZE_TOKEN_PATH']
@@ -55,6 +62,9 @@ def authenticated(method):
             jwt.decode(self.token, options={'verify_signature': False})
         except jwt.ExpiredSignatureError:
             self.login()
+        except jwt.DecodeError:
+            log.warn("Invalid JWT token found at %s. Discarding.", TOKEN_FILE)
+            self.login()
         return method(self, *args, **kwargs)
     return wrapper
 
@@ -73,9 +83,10 @@ def get_token():
 def set_token(token):
     '''Write token to disk'''
     if TOKEN_FILE:
-        myfile = os.open(TOKEN_FILE, os.O_CREAT | os.O_WRONLY, 0o600)
-        with open(myfile, 'w+') as f:
-            f.write(token)
+        with FileLock(TOKEN_FILE + '.lock'):
+            myfile = os.open(TOKEN_FILE, os.O_CREAT | os.O_WRONLY, 0o600)
+            with open(myfile, 'w+') as f:
+                f.write(token)
 
 class Snooze(object):
     '''An object for connecting to the snooze server'''
@@ -85,7 +96,7 @@ class Snooze(object):
             app_name='snooze_client',
             auth_method=None,
             credentials={},
-            token_to_disk=True,
+            token_to_disk=False,
             ca=None,
             **kwargs
         ):
@@ -121,7 +132,7 @@ class Snooze(object):
         self.auth_method = auth_method or self.config.get('auth_method')
         self.credentials = credentials or self.config.get('credentials')
         self.ca = ca or self.config.get('ca_bundle') or ca_bundle()
-        self.token_to_disk = token_to_disk or self.config.get()
+        self.token_to_disk = token_to_disk or self.config.get('token_to_disk')
         if not isinstance(self.server, str):
             raise TypeError("Parameter `server` must be a string representing a URL.")
         self.token = get_token()

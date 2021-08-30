@@ -20,6 +20,7 @@ from snooze_client.cli.snooze import snooze
 def snoozegroup(ctx, **kwargs):
     '''CLI for the snoozeweb server.'''
     ctx.ensure_object(dict)
+    kwargs['token_to_disk'] = True
     ctx.obj['server'] = Snooze(**kwargs)
 
 snoozegroup.add_command(alert)
