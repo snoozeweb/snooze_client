@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="snooze-client",
-    version='1.0.12',
+    version='1.0.14',
     author='Guillaume Ludinard, Florian Dematraz',
     author_email='guillaume.ludi@gmail.com, ',
     description="Client library for snooze server",
@@ -24,6 +24,7 @@ setup(
         'PyYAML',
         'click',
         'click-option-group',
+        'filelock',
         'pathlib',
         'pyjwt',
         'requests',
