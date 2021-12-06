@@ -98,6 +98,7 @@ class Snooze(object):
             credentials={},
             token_to_disk=False,
             ca=None,
+            timeout=5,
             **kwargs
         ):
         '''
@@ -121,6 +122,8 @@ class Snooze(object):
         ca_bundle: str
             Path to the CA bundle to use for the TLS connection. Will default to the system
             CA bundle if not precised (will not use requests custom CA bundle).
+        timeout: float
+            Timeout in seconds for each request.
         Returns
         -------
         Snooze
@@ -133,6 +136,7 @@ class Snooze(object):
         self.credentials = credentials or self.config.get('credentials')
         self.ca = ca or self.config.get('ca_bundle') or ca_bundle()
         self.token_to_disk = token_to_disk or self.config.get('token_to_disk')
+        self.timeout = timeout or self.config.get('timeout')
         if not isinstance(self.server, str):
             raise TypeError("Parameter `server` must be a string representing a URL.")
         self.token = get_token()
@@ -173,6 +177,7 @@ class Snooze(object):
             verify=self.ca,
             auth=auth,
             headers={'Content-type': 'application/json'},
+            timeout=self.timeout,
         )
         response.raise_for_status()
         if response.json().get('token'):
@@ -208,7 +213,7 @@ class Snooze(object):
         Args:
             record (dict): The alert to send to snooze, in dictionary format.
         '''
-        resp = requests.post("{}/api/alert".format(self.server), verify=self.ca, json=record)
+        resp = requests.post("{}/api/alert".format(self.server), verify=self.ca, json=record, timeout=self.timeout)
         resp.raise_for_status()
 
     @authenticated
@@ -239,7 +244,7 @@ class Snooze(object):
             params = {
                 's': [],
             }
-        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers, params=params)
+        resp = requests.get("{}/api/record".format(self.server), verify=self.ca, headers=headers, params=params, timeout=self.timeout)
         resp.raise_for_status()
         return resp.json().get('data')
 
@@ -271,7 +276,7 @@ class Snooze(object):
         }
         if modifications:
             mycomment['modifications'] = modifications
-        resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, json=[mycomment])
+        resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, json=[mycomment], timeout=self.timeout)
         resp.raise_for_status()
         return resp.json().get('data')
 
@@ -309,7 +314,7 @@ class Snooze(object):
         else:
             params['condition'] = []
         print(mysnooze)
-        resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=[params])
+        resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=[params], timeout=self.timeout)
         print(resp.content)
         resp.raise_for_status()
         return resp.json().get('data')
