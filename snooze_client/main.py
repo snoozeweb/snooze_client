@@ -132,10 +132,13 @@ class Snooze(object):
         self.load_config()
         self.server = server or self.config.get('server')
         self.app_name = app_name or self.config.get('app_name') or 'snooze_client'
-        self.auth_method = auth_method or self.config.get('auth_method')
+        self.auth_method = auth_method or self.config.get('auth_method', 'local')
         self.credentials = credentials or self.config.get('credentials')
         self.ca = ca or self.config.get('ca_bundle') or ca_bundle()
-        self.token_to_disk = token_to_disk or self.config.get('token_to_disk')
+        if token_to_disk is not None:
+            self.token_to_disk = token_to_disk
+        else:
+            self.token_to_disk = self.config.get('token_to_disk')
         self.timeout = timeout or self.config.get('timeout')
         if not isinstance(self.server, str):
             raise TypeError("Parameter `server` must be a string representing a URL.")
