@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="snooze-client",
-    version='1.0.15',
+    version='1.0.16',
     author='Guillaume Ludinard, Florian Dematraz',
     author_email='guillaume.ludi@gmail.com, ',
     description="Client library for snooze server",
