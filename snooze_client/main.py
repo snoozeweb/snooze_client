@@ -195,8 +195,7 @@ class Snooze(object):
         if 'host' not in record:
             host = socket.gethostname()
             if '.' in host:
-                record['host'] = host.split('.')[0]
-                record['fqdn'] = host
+                record['host'], record['domain'] = host.split('.', 2)
             else:
                 record['host'] = host
         if 'timestamp' not in record:
