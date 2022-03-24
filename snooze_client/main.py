@@ -8,6 +8,7 @@ import json
 import socket
 import logging
 import sys
+import functools
 
 from functools import wraps
 from  pathlib import Path
@@ -87,6 +88,14 @@ def set_token(token):
             myfile = os.open(TOKEN_FILE, os.O_CREAT | os.O_WRONLY, 0o600)
             with open(myfile, 'w+') as f:
                 f.write(token)
+
+def merge_responses(responses):
+    '''Merge API responses'''
+    return {'data': functools.reduce(lambda a, b: {k: a.get('data', {}).get(k, []) + b.get('data', {}).get(k, []) for k in list(dict.fromkeys(list(a.get('data', {}).keys()) + list(b.get('data', {}).keys())))}, responses)}
+
+def get_chunks(lst, n):
+    '''Split list into chunks of equal size'''
+    return [lst[i:i + n] for i in range(0, len(lst), n)]
 
 class Snooze(object):
     '''An object for connecting to the snooze server'''
@@ -282,6 +291,39 @@ class Snooze(object):
         resp.raise_for_status()
         return resp.json().get('data')
 
+
+    @authenticated
+    def comment_batch(self, comments):
+        '''
+        Write multiple comments.
+
+        Args:
+			comments(dict, list): Comments to write
+        '''
+        headers = {}
+        headers['Authorization'] = 'JWT ' + self.token
+        headers['Content-type'] = 'application/json'
+        mycomments = []
+        if not isinstance(comments, list):
+            comments = [comments]
+        for comment in comments:
+            mycomment = {
+                'record_uid': comment['record_uid'],
+                'type': comment.get('type', 'comment'),
+                'message': comment.get('message', ''),
+                'name': comment.get('name', 'Anonymous'),
+                'method': comment.get('method', 'local'),
+                'date': datetime.now().isoformat(),
+				'modifications': comment.get('modifications', []),
+            }
+            mycomments.append(mycomment)
+        responses = []
+        for comment_block in get_chunks(mycomments, 10):
+            resp = requests.post("{}/api/comment".format(self.server), verify=self.ca, headers=headers, json=comment_block, timeout=self.timeout)
+            resp.raise_for_status()
+            responses.append(resp.json())
+        return merge_responses(responses).get('data')
+
     @authenticated
     def snooze(self, name, condition=None, ql=None, time_constraint={}, comment=None):
         '''
@@ -299,7 +341,6 @@ class Snooze(object):
         headers = {}
         headers['Authorization'] = 'JWT ' + self.token
         headers['Content-type'] = 'application/json'
-        mysnooze = {}
         if not comment:
             comment = "Created by snooze API"
         if isinstance(time_constraint, Constraint):
@@ -315,8 +356,43 @@ class Snooze(object):
             params['qls'] = [{'ql': ql, 'field': 'condition'}]
         else:
             params['condition'] = []
-        print(mysnooze)
         resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=[params], timeout=self.timeout)
-        print(resp.content)
         resp.raise_for_status()
         return resp.json().get('data')
+
+    @authenticated
+    def snooze_batch(self, filters):
+        '''
+        Create a snooze entry.
+
+        Args:
+			snoozes(dict, list): Snooze filters to write
+        '''
+        headers = {}
+        headers['Authorization'] = 'JWT ' + self.token
+        headers['Content-type'] = 'application/json'
+        if not isinstance(filters, list):
+            filters = [filters]
+        myfilters = []
+        for f in filters:
+            time_constraints = f.get('time_constraints', [])
+            if isinstance(time_constraints, Constraint):
+                time_constraints = time_constraints.to_time_constraint()
+            myfilter = {
+                'name': "[{}] {}".format(self.app_name, f['name']),
+                'time_constraints': time_constraints,
+                'comment': f.get('comment', "Created by snooze API"),
+            }
+            if f.get('condition'):
+                myfilter['condition'] = f['condition']
+            elif f.get('ql'):
+                myfilter['qls'] = [{'ql': f['ql'], 'field': 'condition'}]
+            else:
+                myfilter['condition'] = []
+            myfilters.append(myfilter)
+        responses = []
+        for filter_block in get_chunks(myfilters, 10):
+            resp = requests.post("{}/api/snooze".format(self.server), verify=self.ca, headers=headers, json=filter_block, timeout=self.timeout)
+            resp.raise_for_status()
+            responses.append(resp.json())
+        return merge_responses(responses).get('data')
