@@ -60,7 +60,10 @@ def authenticated(method):
         if not self.token:
             self.login()
         try:
-            jwt.decode(self.token, options={'verify_signature': False})
+            token = jwt.decode(self.token, options={'verify_signature': False})
+            if datetime.now().timestamp() >= token['exp']:
+                log.info("Token has expired (%f). Regenerating token", token['exp'])
+                self.login()
         except jwt.ExpiredSignatureError:
             self.login()
         except jwt.DecodeError:
@@ -152,10 +155,6 @@ class Snooze(object):
         if not isinstance(self.server, str):
             raise TypeError("Parameter `server` must be a string representing a URL.")
         self.token = get_token()
-        try:
-            self.auth_payload = jwt.decode(self.token, options={'verify_signature': False})
-        except Exception:
-            self.auth_payload = None
 
     def load_config(self):
         '''Fetch configuration from config file if no option is given'''
